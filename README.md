@@ -1,0 +1,2 @@
+# Algorithmic_Trading_in_Turkey
+This repository consist of a basic python script which gets BIST30 stock values/saves them (using yahoo finance). Then it uses these values in backtrader.py library to check their RSI values. I twisted basic backtrader getting started code so that It would read all BIST30 stock values, operate on them to check their RSI values and mail to me if the RSI value gets smaller than some value (30 for example). Although it is simple, it can be used as a starting code for those who wants to investigate in Turkey's companies stock prices.
