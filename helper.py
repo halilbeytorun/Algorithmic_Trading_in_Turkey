@@ -29,7 +29,7 @@ def save_stock_to_csv(stock_name: str):
 
     #stock = yf.download(stock_names_dict[stock_name], start, end, progress=False)
     stock = yf.download(stock_name + '.IS', start, end, progress=False)
-    stock.to_csv('---------------' + stock_name + '.csv')
+    stock.to_csv("./data/" + stock_name + '.csv')
 
 def mail_sender(stock_name: str):
     '''

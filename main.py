@@ -85,8 +85,8 @@ class TestStrategy(bt.Strategy):
 
         if(self.datas[0].datetime.date(0) == (datetime.datetime.now().date() - datetime.timedelta(days=1))):
             if self.rsi[0] < self.rsi.params.lowerband: #Send the warning! Here
-                helper.mail_sender(global_stock_name)
-                print("BURA")
+                #helper.mail_sender(global_stock_name)
+                print("-----------------------------------------WARNING------------------------------------")
 
                 
 
@@ -95,37 +95,37 @@ class TestStrategy(bt.Strategy):
 if __name__ == '__main__':
 
     # Bist 30
-    #stock_list = ['THYAO', 'AKBNK', 'ARCLK', 'ASELS', 'BIMAS', 'DOHOL', 'EKGYO', 'EREGL'
-    #, 'FROTO', 'GUBRF', 'GARAN', 'KRDMD', 'KCHOL', 'KOZAL', 'KOZAA', 'PGSUS', 'PETKM', 'SAHOL'
-    #, 'SASA', 'SISE', 'TAVHL', 'TKFEN', 'TUPRS', 'TTKOM', 'TCELL', 'HALKB', 'ISCTR', 'VAKBN'
-    #, 'VESTL', 'YKBNK'
-    #]
-
-    # Bist 100
     stock_list = ['THYAO', 'AKBNK', 'ARCLK', 'ASELS', 'BIMAS', 'DOHOL', 'EKGYO', 'EREGL'
-    , 'FROTO', 'GUBRF', 'GARAN', 'KRDMD', 'KCHOL', 'KOZAL', 'KOZAA', 'PGSUS', 'PETKM', 'SAHOL'
+    , 'GUBRF', 'GARAN', 'KRDMD', 'KCHOL', 'KOZAL', 'KOZAA', 'PGSUS', 'PETKM', 'SAHOL'
     , 'SASA', 'SISE', 'TAVHL', 'TKFEN', 'TUPRS', 'TTKOM', 'TCELL', 'HALKB', 'ISCTR', 'VAKBN'
     , 'VESTL', 'YKBNK'
-    , 'AEFES', 'AGHOL', ' AKCNS', 'AKSA', ' AKSEN', 'ALARK', 'ALBRK', ' ALGYO', 'ALKIM', 'ARDYZ', 'AYDEM', 'AYGAZ'
-    , 'BERA',  'BRISA' # , 'BIOEN',
-    , 'CANTE', 'CCOLA', 'CEMTS', 'CIMSA'
-    ,  'DEVA', 'DOAS'
-    , 'ECILC', 'EGEEN', 'ENJSA', 'ENKAI', 'ERBOS'      # , 'ESEN'
-    , 'GLYHO', 'GOZDE', 'HEKTS', 'HLGYO', 'INDES', 'ISCTR', 'ISDMR', 'ISFIN', 'ISGYO', 'ISMEN'  #, 'IZDMC'
-    , 'KARSN', 'KARTN', 'KERVT', 'KORDS' #, 'KRVGD'
-    , 'LOGO'
-    , 'MAVI', 'MGROS', 'MPARK'
-    , 'NETAS'
-    ,'ODAS', 'OTKAR', 'OYAKC', 'PARSN'
-    , 'QUAGR'
-    , 'SARKY', 'SELEC', 'SKBNK', 'SOKM'
-    , 'TKNSA', 'TMSN', 'TOASO', 'TRGYO', 'TSKB', 'TTRAK', 'TURSG'   #, 'TRILC'
-    , 'ULKER'
-    , 'VERUS', 'VESBE'
-    , 'YATAS'
-    , 'ZOREN'#, 'ZRGYO'
-
     ]
+
+    # # Bist 100
+    # stock_list = ['THYAO', 'AKBNK', 'ARCLK', 'ASELS', 'BIMAS', 'DOHOL', 'EKGYO', 'EREGL'
+    # , 'FROTO', 'GUBRF', 'GARAN', 'KRDMD', 'KCHOL', 'KOZAL', 'KOZAA', 'PGSUS', 'PETKM', 'SAHOL'
+    # , 'SASA', 'SISE', 'TAVHL', 'TKFEN', 'TUPRS', 'TTKOM', 'TCELL', 'HALKB', 'ISCTR', 'VAKBN'
+    # , 'VESTL', 'YKBNK'
+    # , 'AEFES', 'AGHOL', ' AKCNS', 'AKSA', ' AKSEN', 'ALARK', 'ALBRK', ' ALGYO', 'ALKIM', 'ARDYZ', 'AYDEM', 'AYGAZ'
+    # , 'BERA',  'BRISA' # , 'BIOEN',
+    # , 'CANTE', 'CCOLA', 'CEMTS', 'CIMSA'
+    # ,  'DEVA', 'DOAS'
+    # , 'ECILC', 'EGEEN', 'ENJSA', 'ENKAI', 'ERBOS'      # , 'ESEN'
+    # , 'GLYHO', 'GOZDE', 'HEKTS', 'HLGYO', 'INDES', 'ISCTR', 'ISDMR', 'ISFIN', 'ISGYO', 'ISMEN'  #, 'IZDMC'
+    # , 'KARSN', 'KARTN', 'KERVT', 'KORDS' #, 'KRVGD'
+    # , 'LOGO'
+    # , 'MAVI', 'MGROS', 'MPARK'
+    # , 'NETAS'
+    # ,'ODAS', 'OTKAR', 'OYAKC', 'PARSN'
+    # , 'QUAGR'
+    # , 'SARKY', 'SELEC', 'SKBNK', 'SOKM'
+    # , 'TKNSA', 'TMSN', 'TOASO', 'TRGYO', 'TSKB', 'TTRAK', 'TURSG'   #, 'TRILC'
+    # , 'ULKER'
+    # , 'VERUS', 'VESBE'
+    # , 'YATAS'
+    # , 'ZOREN'#, 'ZRGYO'
+
+    # ]
 
     for name in stock_list:
         global_stock_name = name    # To call the stock name in the above class
@@ -141,7 +141,7 @@ if __name__ == '__main__':
         # Datas are in a subfolder of the samples. Need to find where the script is
         # because it could have been called from anywhere
         modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-        datapath = os.path.join(modpath, '../datas/' + name+'.csv')
+        datapath = os.path.join(modpath, './data/' + name+'.csv')
 
         # Create a Data Feed
         data = bt.feeds.YahooFinanceCSVData(
