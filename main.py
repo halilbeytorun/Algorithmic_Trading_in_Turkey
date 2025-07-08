@@ -4,28 +4,19 @@ from __future__ import (absolute_import, division, print_function,
 
 import datetime
 import os.path
-import sys
 
 import backtrader as bt
 import helper
 
-# import debugpy
-# debugpy.listen(5678)
-# debugpy.wait_for_client()  # blocks execution until client is attached
-
-
-
 # Create a Stratey
 class TestStrategy(bt.Strategy):
-    params = (
-    ('rsi_period', 15), ('rsi_lower_band', 35), ('rsi_upper_band', 67), ('exitbars', 5)
-    )
-    def __init__(self):
+    def __init__(self, rsi_period:int=15, rsi_lower_band:int=35, rsi_upper_band:int=67, exitbars:int=5):
         # Keep a reference to the "close" line in the data[0] dataseries
         self.dataclose = self.datas[0].close
 
         # Add a Relative Strength Index (RSI)   
-        self.rsi = bt.indicators.RelativeStrengthIndex(self.datas[0], period = self.params.rsi_period, lowerband=self.params.rsi_lower_band, upperband=self.params.rsi_upper_band)  # todo how does it work like that?
+        self.rsi = bt.indicators.RelativeStrengthIndex(self.datas[0], period=rsi_period, lowerband=rsi_lower_band, 
+                                                        upperband=rsi_upper_band)  # todo how does it work like that?
 
 
     def next(self):
@@ -37,17 +28,18 @@ class TestStrategy(bt.Strategy):
 
 if __name__ == '__main__':
 
+    data_path: str = "./data/"
+
     for name in helper.bist30_stock_list:
         print(name)
-
-        helper.save_stock_to_csv(name)
+        
+        helper.save_stock_to_csv(name, data_path)
 
         cerebro = bt.Cerebro()
 
-        cerebro.addstrategy(TestStrategy)
+        cerebro.addstrategy(TestStrategy, rsi_period=15, rsi_lower_band=35, rsi_upper_band=67, exitbars=5)
 
-        modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-        datapath = os.path.join(modpath, './data/' + name+'.csv')
+        datapath = os.path.join(data_path + name + '.csv')
 
         data = bt.feeds.YahooFinanceCSVData(
             dataname=datapath,
@@ -74,5 +66,3 @@ if __name__ == '__main__':
 
         # Print out the final result
         print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
-
-
