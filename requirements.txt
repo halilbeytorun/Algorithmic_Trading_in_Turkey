@@ -1,5 +1,3 @@
-backtrader
-yfinance
 pandas
-numpy
-requests
+yfinance
+backtrader
