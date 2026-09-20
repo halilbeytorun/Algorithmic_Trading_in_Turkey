@@ -1,3 +1,5 @@
+
+
 # Algorithmic Trading in Turkey
 
 ## Overview
@@ -32,6 +34,9 @@ python3 main.py
 
 Each successful line contains the symbol, completed session date, adjusted
 close, RSI value, and either `OK` or `WARNING`.
+
+The process exits with status `1` if any symbol fails to process and with
+status `0` when all symbols process successfully.
 
 ## Tests
 
