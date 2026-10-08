@@ -1,11 +1,132 @@
+import csv
 import datetime
+import io
+import tempfile
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
 import helper
 import main
+
+
+UNIVERSE_FIELDNAMES = [
+    "symbol",
+    "yahoo_symbol",
+    "effective_from",
+    "effective_to",
+    "retrieved_at",
+    "source_url",
+]
+
+
+class UniverseTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_directory.cleanup)
+
+    def make_rows(self, count=30):
+        return [
+            {
+                "symbol": "S{:02d}".format(index),
+                "yahoo_symbol": "S{:02d}.IS".format(index),
+                "effective_from": "2026-07-01",
+                "effective_to": "2026-09-30",
+                "retrieved_at": "2026-09-03",
+                "source_url": "https://example.com/official-source.csv",
+            }
+            for index in range(count)
+        ]
+
+    def write_universe(self, rows, fieldnames=UNIVERSE_FIELDNAMES):
+        path = Path(self.temp_directory.name) / "bist30.csv"
+        with path.open("w", newline="", encoding="utf-8") as universe_file:
+            writer = csv.DictWriter(
+                universe_file, fieldnames=fieldnames, extrasaction="ignore"
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def test_default_universe_contains_30_q3_mappings(self):
+        universe = helper.load_bist30_universe(
+            as_of_date=datetime.date(2026, 9, 3)
+        )
+        mappings = {entry.symbol: entry.yahoo_symbol for entry in universe}
+
+        self.assertEqual(len(universe), 30)
+        self.assertEqual(mappings["TRALT"], "TRALT.IS")
+        self.assertEqual(mappings["DSTKF"], "DSTKF.IS")
+        self.assertNotIn("TRMET", mappings)
+        self.assertNotIn("KOZAL", mappings)
+        self.assertNotIn("KOZAA", mappings)
+
+    def test_default_universe_contains_30_q4_mappings(self):
+        universe = helper.load_bist30_universe(
+            as_of_date=datetime.date(2026, 10, 8)
+        )
+        mappings = {entry.symbol: entry.yahoo_symbol for entry in universe}
+
+        self.assertEqual(len(universe), 30)
+        self.assertEqual(mappings["TRMET"], "TRMET.IS")
+        self.assertNotIn("DSTKF", mappings)
+        self.assertTrue(
+            all(
+                entry.effective_from == datetime.date(2026, 10, 1)
+                and entry.effective_to == datetime.date(2026, 12, 31)
+                for entry in universe
+            )
+        )
+
+    def test_universe_rejects_missing_column(self):
+        fieldnames = [
+            column for column in UNIVERSE_FIELDNAMES if column != "source_url"
+        ]
+        path = self.write_universe(self.make_rows(), fieldnames)
+
+        with self.assertRaisesRegex(ValueError, "missing columns: source_url"):
+            helper.load_bist30_universe(
+                path, as_of_date=datetime.date(2026, 9, 3)
+            )
+
+    def test_universe_rejects_malformed_date(self):
+        rows = self.make_rows()
+        rows[0]["effective_from"] = "not-a-date"
+        path = self.write_universe(rows)
+
+        with self.assertRaisesRegex(ValueError, "invalid ISO date"):
+            helper.load_bist30_universe(
+                path, as_of_date=datetime.date(2026, 9, 3)
+            )
+
+    def test_universe_rejects_duplicate_symbol(self):
+        rows = self.make_rows()
+        rows[1]["symbol"] = rows[0]["symbol"]
+        path = self.write_universe(rows)
+
+        with self.assertRaisesRegex(ValueError, "duplicate BIST symbols: S00"):
+            helper.load_bist30_universe(
+                path, as_of_date=datetime.date(2026, 9, 3)
+            )
+
+    def test_universe_requires_exactly_30_active_entries(self):
+        path = self.write_universe(self.make_rows(count=29))
+
+        with self.assertRaisesRegex(ValueError, "found 29"):
+            helper.load_bist30_universe(
+                path, as_of_date=datetime.date(2026, 9, 3)
+            )
+
+    def test_universe_rejects_date_outside_effective_period(self):
+        path = self.write_universe(self.make_rows())
+
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            helper.load_bist30_universe(
+                path, as_of_date=datetime.date(2026, 10, 1)
+            )
 
 
 class MarketDataTests(unittest.TestCase):
@@ -29,7 +150,7 @@ class MarketDataTests(unittest.TestCase):
             helper.validate_stock_data(data, "THYAO", minimum_rows=1)
 
     @patch("helper.yf.Ticker")
-    def test_download_requests_adjusted_daily_data(self, ticker):
+    def test_download_uses_explicit_yahoo_mapping(self, ticker):
         data = pd.DataFrame(
             {
                 "Close": range(100, 116),
@@ -39,9 +160,9 @@ class MarketDataTests(unittest.TestCase):
         )
         ticker.return_value.history.return_value = data
 
-        result = helper.download_stock_data("THYAO")
+        result = helper.download_stock_data("TRALT", "TRALT.IS")
 
-        ticker.assert_called_once_with("THYAO.IS")
+        ticker.assert_called_once_with("TRALT.IS")
         ticker.return_value.history.assert_called_once_with(
             period="250d",
             interval="1d",
@@ -88,11 +209,40 @@ class RsiTests(unittest.TestCase):
             index=pd.date_range("2026-01-01", periods=17, freq="D"),
         )
 
-        result = main.scan_stock("THYAO", as_of_date=datetime.date(2026, 1, 18))
+        result = main.scan_stock(
+            "THYAO", "THYAO.IS", as_of_date=datetime.date(2026, 1, 18)
+        )
 
-        download_stock_data.assert_called_once_with("THYAO", minimum_rows=16)
+        download_stock_data.assert_called_once_with(
+            "THYAO", "THYAO.IS", minimum_rows=16
+        )
         self.assertEqual(result["Close"], 116.0)
         self.assertEqual(result["RSI"], 100.0)
+
+
+class ProviderValidationTests(unittest.TestCase):
+    @patch("main.helper.download_stock_data")
+    def test_provider_validation_uses_configured_mapping(self, download_stock_data):
+        download_stock_data.return_value = pd.DataFrame(
+            {"Close": [100.0], "Volume": [1000]},
+            index=pd.to_datetime(["2026-09-02"]),
+        )
+        entry = helper.UniverseEntry(
+            symbol="TRALT",
+            yahoo_symbol="TRALT.IS",
+            effective_from=datetime.date(2026, 7, 1),
+            effective_to=datetime.date(2026, 9, 30),
+            retrieved_at=datetime.date(2026, 9, 3),
+            source_url="https://example.com/official-source.csv",
+        )
+
+        with redirect_stdout(io.StringIO()):
+            status = main.validate_provider_mappings([entry])
+
+        self.assertEqual(status, 0)
+        download_stock_data.assert_called_once_with(
+            "TRALT", "TRALT.IS", period="5d", minimum_rows=1
+        )
 
 
 if __name__ == "__main__":

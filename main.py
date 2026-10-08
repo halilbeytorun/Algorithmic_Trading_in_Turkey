@@ -1,8 +1,10 @@
-"""Scan BIST stocks for a low Relative Strength Index (RSI)."""
+"""Scan BIST 30 stocks for a low Relative Strength Index (RSI)."""
 
+import argparse
 import datetime
 import sys
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Sequence
 
 import pandas as pd
 
@@ -90,23 +92,101 @@ def latest_completed_row(
 
 
 def scan_stock(
-    stock_name: str, as_of_date: Optional[datetime.date] = None
+    stock_name: str,
+    yahoo_symbol: str,
+    as_of_date: Optional[datetime.date] = None,
 ) -> pd.Series:
-    data = helper.download_stock_data(stock_name, minimum_rows=RSI_PERIOD + 1)
+    data = helper.download_stock_data(
+        stock_name, yahoo_symbol, minimum_rows=RSI_PERIOD + 1
+    )
     analyzed = data.copy()
     analyzed[RSI_COLUMN] = calculate_rsi(analyzed["Close"], RSI_PERIOD)
     return latest_completed_row(analyzed, as_of_date)
 
 
-def main() -> int:
+def validate_provider_mappings(
+    universe: Sequence[helper.UniverseEntry],
+) -> int:
+    """Check that every configured Yahoo symbol returns daily market data."""
     failures = 0
 
-    for stock_name in helper.bist30_stock_list:
+    for entry in universe:
         try:
-            result = scan_stock(stock_name)
+            data = helper.download_stock_data(
+                entry.symbol,
+                entry.yahoo_symbol,
+                period="5d",
+                minimum_rows=1,
+            )
         except Exception as error:
             failures += 1
-            print("{} | ERROR: {}".format(stock_name, error), file=sys.stderr)
+            print(
+                "{} | {} | ERROR: {}".format(
+                    entry.symbol, entry.yahoo_symbol, error
+                ),
+                file=sys.stderr,
+            )
+            continue
+
+        latest_date = pd.Timestamp(data.index[-1]).date().isoformat()
+        print(
+            "{} | {} | latest={} | OK".format(
+                entry.symbol, entry.yahoo_symbol, latest_date
+            )
+        )
+
+    return 1 if failures else 0
+
+
+def _iso_date(value: str) -> datetime.date:
+    try:
+        return datetime.date.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "Expected a date in YYYY-MM-DD format"
+        ) from error
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--as-of",
+        type=_iso_date,
+        help="load the universe active on this date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--universe",
+        type=Path,
+        default=helper.DEFAULT_UNIVERSE_PATH,
+        help="path to an effective-dated BIST 30 CSV file",
+    )
+    parser.add_argument(
+        "--validate-universe",
+        action="store_true",
+        help="check all configured Yahoo mappings without calculating RSI",
+    )
+    arguments = parser.parse_args(argv)
+
+    try:
+        universe = helper.load_bist30_universe(
+            arguments.universe, arguments.as_of
+        )
+    except ValueError as error:
+        print("UNIVERSE ERROR: {}".format(error), file=sys.stderr)
+        return 1
+
+    if arguments.validate_universe:
+        return validate_provider_mappings(universe)
+
+    failures = 0
+    for entry in universe:
+        try:
+            result = scan_stock(
+                entry.symbol, entry.yahoo_symbol, arguments.as_of
+            )
+        except Exception as error:
+            failures += 1
+            print("{} | ERROR: {}".format(entry.symbol, error), file=sys.stderr)
             continue
 
         session_date = pd.Timestamp(result.name).date().isoformat()
@@ -115,7 +195,7 @@ def main() -> int:
         status = "WARNING" if rsi < RSI_LOWER_BAND else "OK"
         print(
             "{} | date={} | adjusted_close={:.2f} | RSI({})={:.2f} | {}".format(
-                stock_name, session_date, close, RSI_PERIOD, rsi, status
+                entry.symbol, session_date, close, RSI_PERIOD, rsi, status
             )
         )
 
