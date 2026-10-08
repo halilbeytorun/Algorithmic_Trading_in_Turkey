@@ -15,6 +15,9 @@ import yfinance as yf
 
 EXPECTED_UNIVERSE_SIZE = 30
 DEFAULT_UNIVERSE_PATH = Path(__file__).resolve().parent / "config" / "bist30.csv"
+DEFAULT_HISTORY_PERIOD = "2y"
+DEFAULT_FX_HISTORY_PERIOD = "5y"
+USDTRY_YAHOO_SYMBOL = "USDTRY=X"
 UNIVERSE_COLUMNS = {
     "symbol",
     "yahoo_symbol",
@@ -35,6 +38,26 @@ class UniverseEntry:
     effective_to: datetime.date
     retrieved_at: datetime.date
     source_url: str
+
+
+def _drop_trailing_incomplete_rows(
+    data: pd.DataFrame, data_name: str
+) -> pd.DataFrame:
+    """Discard only contiguous trailing rows whose close is unavailable."""
+    missing_close = data["Close"].isna()
+    if not missing_close.any():
+        return data
+
+    first_missing_position = int(missing_close.to_numpy().argmax())
+    if not missing_close.iloc[first_missing_position:].all():
+        raise ValueError(
+            "{} contains an incomplete row inside its history".format(data_name)
+        )
+
+    completed = data.iloc[:first_missing_position].copy()
+    if completed.empty:
+        raise ValueError("{} returned no complete market data".format(data_name))
+    return completed
 
 
 def load_bist30_universe(
@@ -190,6 +213,7 @@ def validate_stock_data(
                 stock_name, ", ".join(sorted(missing_columns))
             )
         )
+    data = _drop_trailing_incomplete_rows(data, stock_name)
     if len(data) < minimum_rows:
         raise ValueError(
             "{} returned {} rows; at least {} are required".format(
@@ -226,14 +250,86 @@ def validate_stock_data(
 def download_stock_data(
     stock_name: str,
     yahoo_symbol: str,
-    period: str = "250d",
+    period: str = DEFAULT_HISTORY_PERIOD,
     minimum_rows: int = 16,
+    start: Optional[datetime.date] = None,
+    end: Optional[datetime.date] = None,
 ) -> pd.DataFrame:
     """Download adjusted daily prices and return a validated DataFrame."""
-    data = yf.Ticker(yahoo_symbol).history(
-        period=period,
-        interval="1d",
-        auto_adjust=True,
-        actions=False,
-    )
+    if (start is None) != (end is None):
+        raise ValueError("Stock history requires both start and end dates")
+
+    history_options = {
+        "interval": "1d",
+        "auto_adjust": True,
+        "actions": False,
+    }
+    if start is None:
+        history_options["period"] = period
+    else:
+        history_options["start"] = start
+        history_options["end"] = end
+
+    data = yf.Ticker(yahoo_symbol).history(**history_options)
     return validate_stock_data(data, stock_name, minimum_rows)
+
+
+def validate_usdtry_data(
+    data: pd.DataFrame, minimum_rows: int = 2
+) -> pd.Series:
+    """Validate USD/TRY data quoted as Turkish lira per US dollar."""
+    if not isinstance(data, pd.DataFrame) or data.empty:
+        raise ValueError("USD/TRY returned no market data")
+    if "Close" not in data.columns:
+        raise ValueError("USD/TRY data is missing column: Close")
+    data = _drop_trailing_incomplete_rows(data, "USD/TRY")
+    if len(data) < minimum_rows:
+        raise ValueError(
+            "USD/TRY returned {} rows; at least {} are required".format(
+                len(data), minimum_rows
+            )
+        )
+
+    try:
+        index = pd.DatetimeIndex(pd.to_datetime(data.index))
+    except (TypeError, ValueError) as error:
+        raise ValueError("USD/TRY has an invalid date index") from error
+    if index.has_duplicates:
+        raise ValueError("USD/TRY data contains duplicate dates")
+
+    close = pd.to_numeric(data["Close"], errors="coerce")
+    if close.isna().any() or not close.map(math.isfinite).all():
+        raise ValueError("USD/TRY closing rates contain invalid values")
+    if (close <= 0).any():
+        raise ValueError("USD/TRY closing rates must be positive")
+
+    return pd.Series(
+        close.astype(float).to_numpy(),
+        index=index,
+        name="USDTRY",
+    ).sort_index()
+
+
+def download_usdtry_data(
+    period: str = DEFAULT_FX_HISTORY_PERIOD,
+    minimum_rows: int = 2,
+    start: Optional[datetime.date] = None,
+    end: Optional[datetime.date] = None,
+) -> pd.Series:
+    """Download validated USD/TRY rates from Yahoo Finance."""
+    if (start is None) != (end is None):
+        raise ValueError("USD/TRY history requires both start and end dates")
+
+    history_options = {
+        "interval": "1d",
+        "auto_adjust": False,
+        "actions": False,
+    }
+    if start is None:
+        history_options["period"] = period
+    else:
+        history_options["start"] = start
+        history_options["end"] = end
+
+    data = yf.Ticker(USDTRY_YAHOO_SYMBOL).history(**history_options)
+    return validate_usdtry_data(data, minimum_rows)

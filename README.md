@@ -3,12 +3,13 @@
 ## Overview
 
 This project downloads daily data for the effective-dated BIST 30 universe and
-reports whether the latest completed session has a 15-period RSI below 40.
+investigates short-term momentum and long-term trends in both TRY and USD.
 
-The screener uses explicitly adjusted Yahoo Finance closing prices. It excludes
-the current Istanbul calendar day's candle because that daily candle may still
-be in progress. It is a market-data screener, not a live trading system, and it
-does not place orders.
+The screener requests two calendar years of explicitly adjusted Yahoo Finance
+closing prices ending at the analysis cutoff, plus enough earlier USD/TRY data
+for safe alignment. It excludes the cutoff date because that daily candle may
+still be in progress. It is a market-data screener, not a live trading system,
+and it does not place orders.
 
 ## Requirements
 
@@ -30,10 +31,17 @@ python -m pip install -r requirements.txt
 python3 main.py
 ```
 
-Each successful line contains the symbol, completed session date, adjusted
-close, RSI value, and either `OK` or `WARNING`.
+Each successful line contains the completed session date and the following
+values in both TRY and USD:
 
-Validate all configured Yahoo Finance mappings without calculating RSI:
+- Adjusted close
+- 15-period RSI
+- 50-session and 200-session simple moving averages
+- 12-month return based on 252 trading sessions
+- Long-term trend direction and setup classification
+
+Validate all configured stock and USD/TRY Yahoo Finance mappings without
+calculating indicators:
 
 ```bash
 python3 main.py --validate-universe
@@ -66,6 +74,41 @@ exactly 30 constituents. Update the file when a new quarterly composition takes
 effect. Yahoo Finance is used only as the price provider, not as the authority
 for index membership.
 
+## Currency And Trend Analysis
+
+Yahoo Finance's `USDTRY=X` series is quoted as TRY per USD. Each historical
+adjusted stock close is converted before calculating its USD indicators:
+
+```text
+adjusted_close_usd = adjusted_close_try / usdtry
+```
+
+Each Yahoo FX close is treated as available on the next calendar date. A stock
+session therefore uses the latest previously completed FX close, never a later
+or still-open daily FX observation. Earlier rates may be carried forward when
+necessary, but rates more than seven calendar days old are rejected.
+
+A long-term uptrend requires all three conditions in the relevant currency:
+
+```text
+close > SMA200
+SMA50 > SMA200
+SMA200 > its value 20 sessions earlier
+```
+
+Possible classifications are:
+
+- `USD_RECOVERY_CANDIDATE`: USD RSI crossed strictly above 30 in a USD uptrend
+- `USD_PULLBACK_WATCH`: USD RSI is below 40 in a USD uptrend
+- `TRY_AND_USD_UPTREND`: both long-term trends are positive
+- `TRY_ONLY_UPTREND`: the nominal TRY trend is not confirmed in USD
+- `USD_ONLY_UPTREND`: only the USD-adjusted trend is positive
+- `LOW_RSI_WITHOUT_UPTREND`: low RSI without a confirmed long-term uptrend
+- `NO_CONFIRMED_UPTREND`: neither long-term uptrend is confirmed
+
+CLI trend fields use `UP` or `NOT_UP`; `NOT_UP` can mean falling, sideways, or a
+mixed trend and should not be interpreted as proof of a downtrend.
+
 ## Tests
 
 The tests use generated data and do not contact Yahoo Finance:
@@ -79,5 +122,10 @@ python3 -m unittest discover -s tests -v
 - The included universe is valid only for its documented effective period and
   must be updated after 2026-12-31.
 - The current day is always excluded, even after the market closes.
+- Future `--as-of` dates are rejected. Historical analysis requests its own
+  two-year warm-up window and still requires a matching effective-dated universe.
 - Yahoo Finance is an unofficial data source and downloads can fail or change.
+- USD adjustment measures dollar-denominated performance, not Turkish
+  inflation-adjusted purchasing power. CPI analysis would require a separate
+  effective-dated inflation series.
 - RSI is an indicator, not a prediction or investment recommendation.
